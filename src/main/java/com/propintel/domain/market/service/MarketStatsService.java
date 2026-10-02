@@ -24,6 +24,8 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class MarketStatsService {
 
+    private static final java.time.ZoneId SEOUL = java.time.ZoneId.of("Asia/Seoul");
+
     public static final String SOURCE_NAME = "국토교통부 실거래가 공개시스템 (본 서비스 수집 DB)";
     public static final String SOURCE_URL = "https://rt.molit.go.kr";
 
@@ -52,7 +54,7 @@ public class MarketStatsService {
 
     public MarketSummary region(String code, Double areaMin, Double areaMax, int months) {
         String name = policyService.findRegion(code).map(PolicyRegion::displayName).orElse(code);
-        Options o = new Options(areaMin, areaMax, months, 3, YearMonth.now(), 3, 0.05, 6);
+        Options o = Options.forRegion(LocalDate.now(SEOUL), areaMin, areaMax, months);
         LocalDate rentFrom = YearMonth.now().minusMonths(months + 3L).atDay(1);
         Stats stats = MarketStatsCalculator.compute(
                 saleRepo.findSalesByRegion(code).stream().map(MarketStatsService::row).toList(),
@@ -65,7 +67,7 @@ public class MarketStatsService {
         Complex c = complexRepo.findById(complexId)
                 .orElseThrow(() -> new EntityNotFoundException("단지 없음: " + complexId));
         String code = c.getRegion() == null ? null : c.getRegion().getCode();
-        Options o = new Options(areaMin, areaMax, months, 1, YearMonth.now(), 3, 0.05, 6);
+        Options o = Options.forComplex(LocalDate.now(SEOUL), areaMin, areaMax, months);
         LocalDate rentFrom = YearMonth.now().minusMonths(months + 3L).atDay(1);
         Stats stats = MarketStatsCalculator.compute(
                 saleRepo.findSalesByComplex(complexId).stream().map(MarketStatsService::row).toList(),

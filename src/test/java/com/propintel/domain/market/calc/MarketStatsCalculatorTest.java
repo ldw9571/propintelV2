@@ -103,4 +103,70 @@ class MarketStatsCalculatorTest {
         assertNull(s.refMonth());
         assertEquals(24, s.monthly().size());
     }
+
+    // ───── 알림 오탐 방지 ─────
+
+    /** 단지 A(8억)·B(12억)·C(10억)에서 매달 99건, 가격 변동 없음 (2025-10 ~ 2026-09) */
+    static List<SaleRow> steadyMarket() {
+        long[] prices = {8 * EOK, 12 * EOK, 10 * EOK};
+        List<SaleRow> l = new ArrayList<>();
+        for (YearMonth m = YearMonth.of(2025, 10); !m.isAfter(YearMonth.of(2026, 9)); m = m.plusMonths(1)) {
+            for (int i = 0; i < 99; i++) {
+                int k = i % 3;
+                l.add(new SaleRow(k + 1, "단지" + (k + 1), 84.0, 10, prices[k], m.atDay(10)));
+            }
+        }
+        return l;
+    }
+
+    @Test
+    void 월초_집계중인_달은_기준월로_쓰지_않는다() {
+        List<SaleRow> l = new ArrayList<>(steadyMarket());
+        for (int i = 0; i < 4; i++) l.add(new SaleRow(1, "A", 84.0, 10, 8 * EOK, LocalDate.parse("2026-10-01")));
+        Stats s = MarketStatsCalculator.compute(l, List.of(),
+                Options.forRegion(LocalDate.parse("2026-10-02"), null, null, 24));
+        // 10월(4건)·9월(신고기한 10/30까지)은 집계 중 → 8월이 기준월
+        assertEquals("2026-08", s.refMonth());
+        assertEquals("보합", s.volume().trend());
+        assertEquals(0.0, s.change(1).rate(), 1e-9);
+    }
+
+    @Test
+    void 신고기한이_지나면_그_달이_기준월이_된다() {
+        Stats s = MarketStatsCalculator.compute(steadyMarket(), List.of(),
+                Options.forRegion(LocalDate.parse("2026-10-30"), null, null, 24));
+        assertEquals("2026-09", s.refMonth());
+    }
+
+    @Test
+    void 거래_단지_구성만_바뀌면_변동률은_0() {
+        List<SaleRow> l = new ArrayList<>();
+        for (int i = 0; i < 50; i++) {
+            l.add(new SaleRow(1, "A", 84.0, 10, 8 * EOK, LocalDate.parse("2026-07-10")));
+            l.add(new SaleRow(2, "B", 84.0, 10, 12 * EOK, LocalDate.parse("2026-07-10")));
+            l.add(new SaleRow(3, "C", 59.0, 10, 6 * EOK, LocalDate.parse("2026-07-10")));
+        }
+        for (int i = 0; i < 100; i++) { // 8월: 비싼 단지 B 거래가 80%
+            boolean b = i < 80;
+            l.add(new SaleRow(b ? 2 : 1, b ? "B" : "A", 84.0, 10, b ? 12 * EOK : 8 * EOK, LocalDate.parse("2026-08-10")));
+        }
+        l.add(new SaleRow(3, "C", 59.0, 10, 6 * EOK, LocalDate.parse("2026-08-10")));
+        Stats s = MarketStatsCalculator.compute(l, List.of(), Options.forRegion(LocalDate.parse("2026-10-01"), null, null, 24));
+        assertEquals("2026-08", s.refMonth());
+        assertEquals(0.0, s.change(1).rate(), 1e-9);   // 예전 방식(월 전체 평균)이면 약 +10%
+        assertEquals(3, s.change(1).pairedGroups());
+    }
+
+    @Test
+    void 비교쌍이_부족하면_변동률을_비운다() {
+        List<SaleRow> l = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            l.add(new SaleRow(1, "A", 84.0, 10, 8 * EOK, LocalDate.parse("2026-07-10")));
+            l.add(new SaleRow(2, "B", 84.0, 10, 12 * EOK, LocalDate.parse("2026-08-10")));
+        }
+        Stats s = MarketStatsCalculator.compute(l, List.of(), Options.forRegion(LocalDate.parse("2026-10-01"), null, null, 24));
+        assertNull(s.change(1).rate());
+        assertEquals(0, s.change(1).pairedGroups());
+        assertNotNull(s.change(1).note());
+    }
 }

@@ -118,8 +118,9 @@ public class PriceChangeInsightService {
         if (rate == null) {
             headline = m.scopeName() + ": " + period + " 가격 변동률을 계산할 수 없습니다 (" + (ch == null ? "" : ch.note()) + ").";
         } else {
-            headline = m.scopeName() + ": 최근 " + months + "개월(" + period + ") 84㎡ 환산 평균가 "
-                    + Won.format(ch.basePrice84()) + " → " + Won.format(s.currentPrice84()) + " (" + Won.pct(rate) + ")";
+            headline = m.scopeName() + ": 최근 " + months + "개월(" + period + ") 같은 단지·평형 " + ch.pairedGroups()
+                    + "개 비교 중앙값 " + Won.pct(rate) + " (참고: 84㎡ 환산 평균가 "
+                    + Won.format(ch.basePrice84()) + " → " + Won.format(s.currentPrice84()) + ")";
         }
 
         List<Factor> observed = factors.stream().filter(f -> f.status() == FactorStatus.OBSERVED).toList();

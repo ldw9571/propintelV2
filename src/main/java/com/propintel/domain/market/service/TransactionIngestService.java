@@ -35,8 +35,9 @@ public class TransactionIngestService {
 
     public enum DataType { SALE, RENT }
 
+    /** canceled: 응답에 포함된 해제 거래 수, removedCanceled: 그중 이미 저장돼 있어 삭제한 거래 수 */
     public record MonthResult(String dealYm, DataType type, int fetched, int saved, int duplicates,
-                              int canceled, String error) {}
+                              int canceled, int removedCanceled, String error) {}
 
     public record CollectResult(String regionCode, String regionName, List<MonthResult> months,
                                 int totalSaved, int errors) {}
@@ -89,10 +90,14 @@ public class TransactionIngestService {
         try {
             List<MolitRawClient.SaleItem> items = client.fetchSales(code, ym);
             int[] c = tx.execute(s -> {
-                int saved = 0, dup = 0, canceled = 0;
+                int saved = 0, dup = 0, canceled = 0, removed = 0;
                 Map<String, Complex> cache = new HashMap<>();
                 for (MolitRawClient.SaleItem it : items) {
-                    if (it.canceled()) { canceled++; continue; }
+                    if (it.canceled()) {
+                        canceled++;
+                        removed += removeCanceled(code, it);
+                        continue;
+                    }
                     if (it.aptName() == null || it.year() == 0) continue;
                     Complex cx = complex(cache, region, code, it.aptName(), it.umdName(), it.buildYear());
                     LocalDate d = LocalDate.of(it.year(), it.month(), it.day());
@@ -106,14 +111,15 @@ public class TransactionIngestService {
                             .areaSqm(area).floor(it.floor()).price(it.priceWon()).dealDate(d).build());
                     saved++;
                 }
-                return new int[]{saved, dup, canceled};
+                return new int[]{saved, dup, canceled, removed};
             });
+            if (c[3] > 0) log.info("[실거래 수집] {} {} 해제 신고된 기존 거래 {}건 삭제", code, ym, c[3]);
             logRepo.save(new CollectionLog(code, ym, "SALE", items.size(), c[0], c[1], c[2], null));
-            return new MonthResult(ym, DataType.SALE, items.size(), c[0], c[1], c[2], null);
+            return new MonthResult(ym, DataType.SALE, items.size(), c[0], c[1], c[2], c[3], null);
         } catch (RuntimeException e) {
             log.warn("매매 수집 실패 {} {}: {}", code, ym, e.getMessage());
             logRepo.save(new CollectionLog(code, ym, "SALE", 0, 0, 0, 0, e.getMessage()));
-            return new MonthResult(ym, DataType.SALE, 0, 0, 0, 0, e.getMessage());
+            return new MonthResult(ym, DataType.SALE, 0, 0, 0, 0, 0, e.getMessage());
         }
     }
 
@@ -140,12 +146,28 @@ public class TransactionIngestService {
                 return new int[]{saved, dup};
             });
             logRepo.save(new CollectionLog(code, ym, "RENT", items.size(), c[0], c[1], 0, null));
-            return new MonthResult(ym, DataType.RENT, items.size(), c[0], c[1], 0, null);
+            return new MonthResult(ym, DataType.RENT, items.size(), c[0], c[1], 0, 0, null);
         } catch (RuntimeException e) {
             log.warn("전월세 수집 실패 {} {}: {}", code, ym, e.getMessage());
             logRepo.save(new CollectionLog(code, ym, "RENT", 0, 0, 0, 0, e.getMessage()));
-            return new MonthResult(ym, DataType.RENT, 0, 0, 0, 0, e.getMessage());
+            return new MonthResult(ym, DataType.RENT, 0, 0, 0, 0, 0, e.getMessage());
         }
+    }
+
+    /**
+     * 해제(취소) 신고된 거래가 이미 저장돼 있으면 삭제한다. (신고가 후 취소되는 "신고가 띄우기" 거래가 남지 않도록)
+     * 단지가 아직 없으면 새로 만들지 않는다.
+     */
+    private int removeCanceled(String code, MolitRawClient.SaleItem it) {
+        if (it.aptName() == null || it.year() == 0) return 0;
+        String address = it.umdName() == null ? "" : it.umdName();
+        Optional<Complex> cx = complexRepo.findFirstByNameAndAddressAndRegion_CodeOrderByIdAsc(it.aptName(), address, code)
+                .or(() -> complexRepo.findFirstByNameAndAddressOrderByIdAsc(it.aptName(), address));
+        if (cx.isEmpty()) return 0;
+        long n = saleRepo.deleteByComplexIdAndTypeAndDealDateAndFloorAndAreaSqmAndPrice(
+                cx.get().getId(), Transaction.TransactionType.SALE, LocalDate.of(it.year(), it.month(), it.day()),
+                it.floor(), (int) it.area(), it.priceWon());
+        return (int) n;
     }
 
     private Complex complex(Map<String, Complex> cache, Region region, String code, String name, String umd,

@@ -129,8 +129,8 @@ public class MonitoringService {
                 var ch = s.change(months);
                 if (ch == null || ch.rate() == null) return Optional.empty();
                 if (up ? ch.rate() < th : ch.rate() > -th) return Optional.empty();
-                String how = "84㎡ 환산 평균가 " + Won.format(ch.basePrice84()) + " → " + Won.format(s.currentPrice84())
-                        + " (" + Won.pct(ch.rate()) + ")";
+                String how = "같은 단지·평형 " + ch.pairedGroups() + "개 비교 중앙값 " + Won.pct(ch.rate())
+                        + " (참고: 전체 84㎡ 환산 평균가 " + Won.format(ch.basePrice84()) + " → " + Won.format(s.currentPrice84()) + ")";
                 return Optional.of(new Candidate(up ? "UP" : "DOWN",
                         "[" + where + "] 최근 " + months + "개월 가격 " + Won.pct(ch.rate()) + (up ? " 상승" : " 하락"),
                         how, ch.baseMonth() + " 대비 " + ref + " (기준월)", ref));
