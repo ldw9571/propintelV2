@@ -1,0 +1,66 @@
+spring:
+  application:
+    name: propintel-backend
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/propintel}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:}          # 비밀번호는 환경변수로 (레포에 올리지 않기)
+
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  flyway:
+    enabled: false
+
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=600s
+
+server:
+  port: 8080
+
+# ── API 키는 모두 환경변수로 설정하세요 (공개 레포에 키를 올리지 않기) ──
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+
+openai:
+  api-key: ${OPENAI_API_KEY:dummy}
+  model: ${OPENAI_MODEL:gpt-4o-mini}
+
+molit:
+  api-key: ${MOLIT_API_KEY:}
+  base-url: https://apis.data.go.kr/1613000
+  trade-path: /RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev   # 매매 (기존 수집기와 동일)
+  rent-path: /RTMSDataSvcAptRent/getRTMSDataSvcAptRent            # 전월세
+
+naver:                       # 네이버 개발자센터 > 검색 API (뉴스). 없으면 샘플(Mock) 뉴스
+  client-id: ${NAVER_CLIENT_ID:}
+  client-secret: ${NAVER_CLIENT_SECRET:}
+
+app:
+  ai:
+    provider: ${AI_PROVIDER:none}     # none | openai | gemini  (뉴스 요약·원인 분석 문장화)
+  scheduling:
+    enabled: true                     # 켜면 기존 BatchScheduler(매월 1일)도 함께 동작
+  monitor:
+    cron: "0 30 6 * * *"              # 매일 06:30 관심지역 실거래 수집 → 뉴스 → 알림 평가
+    collect-months: 2
+  news:
+    cron: "0 0 */3 * * *"             # 3시간마다 뉴스 수집
+  data:
+    stale-after-days: 90              # 규제·세율 데이터가 이 기간 이상 갱신 안 되면 경고
