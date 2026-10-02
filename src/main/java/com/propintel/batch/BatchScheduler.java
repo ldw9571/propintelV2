@@ -4,11 +4,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.*;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 
+/**
+ * 기존(옛) 매매 수집 스케줄러. 기본으로 꺼 둔다.
+ * - 옛 수집기는 해제 거래를 거르지 않고 중복 저장 방지도 없어, 새 수집기(TransactionIngestService)와 함께 돌면
+ *   같은 거래가 두 번 저장되어 통계가 틀어진다.
+ * - kosisStatJob 빈이 없어 runKosisJob 도 같은 매매 Job 을 한 번 더 실행한다.
+ * 관심지역 실거래는 MonitoringScheduler 가 매일 새 수집기로 받는다. 꼭 필요할 때만 app.legacy-batch.enabled=true
+ */
 @Component
+@ConditionalOnProperty(name = "app.legacy-batch.enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class BatchScheduler {

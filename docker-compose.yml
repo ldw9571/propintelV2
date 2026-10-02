@@ -1,16 +1,24 @@
-# 한 번에 실행:  docker compose up --build   →  http://localhost:5173
-# DB만:          docker compose up -d db      (백엔드·프론트는 IDE/터미널에서 실행)
+# 한 번에 실행:  docker compose up -d --build   →  http://<서버IP>:5173  (예: http://192.168.0.110:5173)
+# 로그 보기:     docker compose logs -f backend
+# 업데이트:      git pull && docker compose up -d --build
 # API 키는 같은 폴더의 .env 파일에 넣으세요 (.env.example 참고, .env 는 git 에 올리지 않기)
+#
+# 네트워크에 여는 포트는 화면(5173) 하나뿐입니다. 화면 서버(nginx)가 /api 를 백엔드로 넘겨 줍니다.
+# DB(5432)·백엔드(8080)는 서버 자신(127.0.0.1)에서만 접속할 수 있습니다.
+# 이 서비스에는 로그인이 없으므로 공유기 포트포워딩으로 인터넷에 공개하지 마세요.
+name: propintel
+
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: propintel
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       TZ: Asia/Seoul
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - propintel-db:/var/lib/postgresql/data
     healthcheck:
@@ -20,6 +28,7 @@ services:
 
   backend:
     build: .
+    restart: unless-stopped
     environment:
       DB_URL: jdbc:postgresql://db:5432/propintel
       DB_USERNAME: postgres
@@ -30,15 +39,19 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-none}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-dummy}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # 수집 주기 (초 분 시 일 월 요일). 기본: 실거래 매일 06:30, 뉴스 3시간마다
+      APP_MONITOR_CRON: ${APP_MONITOR_CRON:-0 30 6 * * *}
+      APP_NEWS_CRON: ${APP_NEWS_CRON:-0 0 */3 * * *}
       TZ: Asia/Seoul
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       db:
         condition: service_healthy
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports:
       - "5173:80"
     depends_on:

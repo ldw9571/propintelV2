@@ -56,7 +56,9 @@ app:
   ai:
     provider: ${AI_PROVIDER:none}     # none | openai | gemini  (뉴스 요약·원인 분석 문장화)
   scheduling:
-    enabled: true                     # 켜면 기존 BatchScheduler(매월 1일)도 함께 동작
+    enabled: true                     # 관심지역 모니터링·뉴스 수집 스케줄
+  legacy-batch:
+    enabled: false                    # 옛 매매 수집 스케줄(BatchScheduler). 중복 저장 문제로 기본 꺼짐
   monitor:
     cron: "0 30 6 * * *"              # 매일 06:30 관심지역 실거래 수집 → 뉴스 → 알림 평가
     collect-months: 2
